@@ -155,11 +155,13 @@ CREATE TABLE IF NOT EXISTS public.weighing_logs (
   keterangan_insidental TEXT,
   status_petugas TEXT NOT NULL,
   quick_tags JSONB NOT NULL DEFAULT '[]'::jsonb,
-  image_url TEXT NOT NULL,
+  image_url TEXT,
   petugas_nama TEXT NOT NULL,
   waktu_catat TIMESTAMPTZ NOT NULL DEFAULT now(),
   hasil JSONB NOT NULL
 );
+
+ALTER TABLE public.weighing_logs ALTER COLUMN image_url DROP NOT NULL;
 
 ALTER TABLE public.weighing_logs ENABLE ROW LEVEL SECURITY;
 

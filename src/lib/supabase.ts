@@ -327,6 +327,8 @@ function mapWeighingLogRow(row: Record<string, unknown>): EvaluasiRecord {
     ? quickTagsRaw.map((t) => String(t))
     : [];
 
+  const rawImage = row.image_url ?? row.foto_url ?? row.photo_url ?? row.imageUrl ?? null;
+
   return {
     id: String(row.id),
     kelas: String(row.kelas ?? ''),
@@ -341,11 +343,7 @@ function mapWeighingLogRow(row: Record<string, unknown>): EvaluasiRecord {
       : undefined,
     statusPetugas: String(row.status_petugas ?? row.statusPetugas ?? saranStatus) as StatusPilah,
     quickTags,
-    imageUrl: String(
-      row.image_url ??
-        row.imageUrl ??
-        '/src/assets/images/sample_organik_tercampur_1795446549597.jpg'
-    ),
+    imageUrl: rawImage ? String(rawImage) : null,
     petugasNama: String(row.petugas_nama ?? row.petugasNama ?? 'Petugas Caraka'),
     waktuCatat: String(row.waktu_catat ?? row.waktuCatat ?? new Date().toISOString()),
     hasil: {
@@ -377,7 +375,7 @@ export async function createWeighingLog(
   record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'> & { classId?: string | null }
 ): Promise<EvaluasiRecord> {
   const client = assertSupabase();
-  const payload = {
+  const basePayload = {
     class_id: record.classId ?? null,
     kelas: record.kelas,
     kategori_tong: record.kategoriTong,
@@ -387,17 +385,26 @@ export async function createWeighingLog(
     keterangan_insidental: record.keteranganInsidental?.trim() || null,
     status_petugas: record.statusPetugas,
     quick_tags: Array.isArray(record.quickTags) ? record.quickTags : [],
-    image_url: record.imageUrl,
     petugas_nama: record.petugasNama?.trim() || 'Petugas Caraka',
     waktu_catat: new Date().toISOString(),
     hasil: record.hasil,
   };
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from('weighing_logs')
-    .insert(payload)
+    .insert({ ...basePayload, image_url: null })
     .select()
     .single();
+
+  if (error && error.message?.toLowerCase().includes('image_url')) {
+    const retry = await client
+      .from('weighing_logs')
+      .insert(basePayload)
+      .select()
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) {
     throw new Error(error.message || 'Gagal menyimpan catatan penimbangan ke Supabase.');

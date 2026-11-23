@@ -24,7 +24,7 @@ export interface EvaluasiRecord {
   keteranganInsidental?: string;
   statusPetugas: StatusPilah;
   quickTags: string[];
-  imageUrl: string;
+  imageUrl: string | null;
   petugasNama: string;
   waktuCatat: string;
   hasil: VerifikasiHasil;

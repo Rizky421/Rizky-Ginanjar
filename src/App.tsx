@@ -92,14 +92,14 @@ const MENU_ITEMS: MenuItem[] = [
   {
     id: 'scanner',
     label: 'Scanner QR & Timbang',
-    shortDesc: 'Pindai QR tong kelas, timbang, foto bukti & catatan AI',
+    shortDesc: 'Pindai QR tong kelas, timbang berat, status pilah & catatan kelas',
     icon: QrCode,
     allowedRoles: ['Admin', 'Petugas Timbang'],
   },
   {
     id: 'evaluasi',
     label: 'Papan Evaluasi Kelas',
-    shortDesc: 'Log riwayat penimbangan, filter kelas & evaluasi AI',
+    shortDesc: 'Log riwayat penimbangan, filter kelas & evaluasi pemilahan',
     icon: ClipboardCheck,
     allowedRoles: ['Admin', 'Petugas Timbang', 'Wali Kelas'],
   },

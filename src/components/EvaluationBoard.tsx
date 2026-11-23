@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Check, Search, Trash2, ImageOff, Pencil, X } from 'lucide-react';
+import { Copy, Check, Search, Trash2, Pencil, X } from 'lucide-react';
 import { SESI_PENIMBANGAN_OPTIONS, STATUS_PILAH_OPTIONS } from '../constants';
 import type {
   EvaluasiRecord,
@@ -67,7 +67,6 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
   const [editCatatan, setEditCatatan] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [boardError, setBoardError] = useState<string | null>(null);
-  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const stats = useMemo(() => {
     const total = evaluations.length;
@@ -309,14 +308,11 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
           {[1, 2, 3].map((n) => (
             <div
               key={n}
-              className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col md:flex-row gap-5 animate-pulse"
+              className="bg-white border border-slate-200 rounded-xl p-5 animate-pulse space-y-3"
             >
-              <div className="w-full md:w-48 aspect-[4/3] bg-slate-100 rounded-lg shrink-0" />
-              <div className="flex-1 space-y-3 py-1">
-                <div className="h-4 w-56 bg-slate-100 rounded" />
-                <div className="h-5 w-40 bg-slate-100 rounded" />
-                <div className="h-14 w-full bg-slate-100 rounded" />
-              </div>
+              <div className="h-4 w-56 bg-slate-100 rounded" />
+              <div className="h-5 w-40 bg-slate-100 rounded" />
+              <div className="h-14 w-full bg-slate-100 rounded" />
             </div>
           ))}
         </div>
@@ -342,34 +338,11 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
         </div>
       ) : (
         <div className="space-y-4">
-          {filtered.map((record) => {
-            const imgBroken = failedImages[record.id];
-            return (
+          {filtered.map((record) => (
               <article
                 key={record.id}
-                className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col md:flex-row gap-5"
+                className="bg-white border border-slate-200 rounded-xl p-5 flex flex-col gap-3"
               >
-                <div className="w-full md:w-52 aspect-[4/3] rounded-lg overflow-hidden bg-slate-100 border border-slate-200 shrink-0">
-                  {imgBroken ? (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 p-3 text-center gap-1.5">
-                      <ImageOff className="w-6 h-6" aria-hidden="true" />
-                      <span className="text-xs font-medium">
-                        Tong {record.kategoriTong} {record.kelas}
-                      </span>
-                    </div>
-                  ) : (
-                    <img
-                      src={record.imageUrl}
-                      alt={`Foto isi tong ${record.kategoriTong} kelas ${record.kelas}`}
-                      referrerPolicy="no-referrer"
-                      onError={() =>
-                        setFailedImages((prev) => ({ ...prev, [record.id]: true }))
-                      }
-                      className="w-full h-full object-cover"
-                    />
-                  )}
-                </div>
-
                 <div className="flex-1 min-w-0 flex flex-col justify-between gap-3">
                   <div className="space-y-2.5">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -601,8 +574,7 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
                   </div>
                 </div>
               </article>
-            );
-          })}
+          ))}
         </div>
       )}
     </section>
