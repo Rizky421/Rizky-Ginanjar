@@ -6,6 +6,7 @@ import {
   RotateCcw,
   QrCode,
   Save,
+  CalendarClock,
 } from 'lucide-react';
 import {
   INITIAL_MASTER_DATA,
@@ -16,17 +17,33 @@ import {
 import type {
   EvaluasiRecord,
   KategoriTong,
+  Role,
   SesiPenimbangan,
   StatusPilah,
 } from '../types';
+import {
+  formatLocalHhMm,
+  formatLocalYyyyMmDd,
+  formatTanggalJamSingkat,
+  getNowDateTimeLocalValue,
+  getTodayDateInputValue,
+  parseDateTimeLocalToParts,
+} from '../lib/dateUtils';
 import { StatusLabel } from './StatusLabel';
 import { SesiBadge } from './SesiBadge';
 
 interface VerificationWorkbenchProps {
+  currentRole: Role;
   daftarKelas?: string[];
   quickTagsOrganik?: string[];
   quickTagsNonOrganik?: string[];
-  onSaveEvaluation: (record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'>) => Promise<void>;
+  onSaveEvaluation: (
+    record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'> & {
+      waktuCatat?: string;
+      tanggal?: string;
+      jamCatat?: string;
+    }
+  ) => Promise<void>;
   onOpenBoard: () => void;
   resetSignal: number;
 }
@@ -85,6 +102,7 @@ function buildDefaultEvaluationNote(params: {
 }
 
 export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
+  currentRole,
   daftarKelas = INITIAL_MASTER_DATA.daftarKelas,
   quickTagsOrganik = INITIAL_MASTER_DATA.quickTagsOrganik,
   quickTagsNonOrganik = INITIAL_MASTER_DATA.quickTagsNonOrganik,
@@ -92,6 +110,12 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
   onOpenBoard,
   resetSignal,
 }) => {
+  const isAdmin = currentRole === 'Admin';
+  const todayDateStr = getTodayDateInputValue();
+
+  const [waktuPenimbangan, setWaktuPenimbangan] = useState<string>(() =>
+    getNowDateTimeLocalValue()
+  );
   const [sesiPenimbangan, setSesiPenimbangan] = useState<SesiPenimbangan>(() =>
     detectCurrentSesi()
   );
@@ -128,6 +152,23 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
       setKelas(daftarKelas[0]);
     }
   }, [daftarKelas, kelas]);
+
+  const effectiveTimeParts = isAdmin
+    ? parseDateTimeLocalToParts(waktuPenimbangan || getNowDateTimeLocalValue())
+    : (() => {
+        const now = new Date();
+        return {
+          isoTimestamp: now.toISOString(),
+          tanggal: formatLocalYyyyMmDd(now),
+          jamCatat: formatLocalHhMm(now),
+        };
+      })();
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setWaktuPenimbangan(getNowDateTimeLocalValue());
+    }
+  }, [isAdmin]);
 
   useEffect(() => {
     if (resetSignal > 0) {
@@ -252,6 +293,17 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
         quickTags,
       });
 
+    const saveParts = isAdmin
+      ? parseDateTimeLocalToParts(waktuPenimbangan || getNowDateTimeLocalValue())
+      : (() => {
+          const now = new Date();
+          return {
+            isoTimestamp: now.toISOString(),
+            tanggal: formatLocalYyyyMmDd(now),
+            jamCatat: formatLocalHhMm(now),
+          };
+        })();
+
     try {
       await onSaveEvaluation({
         kelas,
@@ -267,6 +319,9 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
         quickTags,
         imageUrl: null,
         petugasNama: petugasNama.trim() || 'Petugas Caraka',
+        tanggal: saveParts.tanggal,
+        jamCatat: saveParts.jamCatat,
+        waktuCatat: saveParts.isoTimestamp,
         hasil: {
           kesesuaian_visual: statusPetugas === 'Terpilah Sempurna',
           benda_salah_tempat: statusPetugas === 'Terpilah Sempurna' ? [] : quickTags,
@@ -358,6 +413,37 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
                 placeholder="Contoh: Jumat Bersih, Acara OSIS, dll."
                 className="w-full px-3 py-2 min-h-[38px] text-xs sm:text-sm bg-purple-50/50 border border-purple-200 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
               />
+            </div>
+          )}
+
+          {/* Tanggal & Jam Penimbangan (Hanya tampil untuk Admin; Petugas Timbang otomatis memakai new Date()) */}
+          {isAdmin && (
+            <div className="pt-2">
+              <div className="p-3 rounded-lg bg-emerald-50/60 border border-emerald-200 space-y-1.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="input-waktu-penimbangan"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-900"
+                  >
+                    <CalendarClock className="w-3.5 h-3.5 text-[#059669]" aria-hidden="true" />
+                    <span>Tanggal &amp; Jam Penimbangan</span>
+                  </label>
+                  <span className="text-[11px] font-medium text-[#059669]">
+                    Khusus Admin · Bisa Input Susulan
+                  </span>
+                </div>
+                <input
+                  id="input-waktu-penimbangan"
+                  type="datetime-local"
+                  value={waktuPenimbangan}
+                  max={`${todayDateStr}T23:59`}
+                  onChange={(e) => {
+                    setWaktuPenimbangan(e.target.value || getNowDateTimeLocalValue());
+                    setSavedBanner(false);
+                  }}
+                  className="w-full px-3 py-2 min-h-[40px] text-xs sm:text-sm font-mono bg-white border border-emerald-300 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#059669]"
+                />
+              </div>
             </div>
           )}
         </div>
@@ -616,6 +702,10 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
             }
           />
           <span aria-hidden="true">·</span>
+          <span className="font-mono text-slate-700">
+            {formatTanggalJamSingkat(effectiveTimeParts.isoTimestamp)}
+          </span>
+          <span aria-hidden="true">·</span>
           <span className="font-semibold text-slate-900">Kelas {kelas}</span>
           <span aria-hidden="true">·</span>
           <span
@@ -706,7 +796,8 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
                   Penimbangan Tersimpan ke Papan Evaluasi
                 </p>
                 <p className="text-xs text-emerald-800">
-                  Data timbangan kelas {kelas} ({parseFloat(beratKg || '0').toFixed(1)} kg) berhasil dicatat.
+                  Data timbangan kelas {kelas} ({parseFloat(beratKg || '0').toFixed(1)} kg) pada{' '}
+                  {formatTanggalJamSingkat(effectiveTimeParts.isoTimestamp)} berhasil dicatat.
                 </p>
               </div>
             </div>

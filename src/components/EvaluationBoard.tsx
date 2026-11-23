@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Check, Search, Trash2, Pencil, X } from 'lucide-react';
+import { Copy, Check, Search, Trash2, Pencil, X, CalendarClock } from 'lucide-react';
 import { SESI_PENIMBANGAN_OPTIONS, STATUS_PILAH_OPTIONS } from '../constants';
 import type {
   EvaluasiRecord,
@@ -8,6 +8,7 @@ import type {
   SesiPenimbangan,
   StatusPilah,
 } from '../types';
+import { toDateInputValue, toDateTimeLocalInputValue } from '../lib/dateUtils';
 import { StatusLabel } from './StatusLabel';
 import { SesiBadge } from './SesiBadge';
 
@@ -24,6 +25,10 @@ interface EvaluationBoardProps {
       statusPetugas: StatusPilah;
       hasil: EvaluasiRecord['hasil'];
     }
+  ) => Promise<void>;
+  onUpdateEvaluationDateTime: (
+    id: string,
+    dateTimeLocalInput: string
   ) => Promise<void>;
   onDeleteEvaluation: (id: string) => Promise<void>;
   onGoToVerify: () => void;
@@ -49,6 +54,7 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
   isLoading,
   currentRole,
   onUpdateEvaluation,
+  onUpdateEvaluationDateTime,
   onDeleteEvaluation,
   onGoToVerify,
 }) => {
@@ -67,6 +73,11 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
   const [editCatatan, setEditCatatan] = useState<string>('');
   const [isUpdating, setIsUpdating] = useState<boolean>(false);
   const [boardError, setBoardError] = useState<string | null>(null);
+
+  const [timeModalRecord, setTimeModalRecord] = useState<EvaluasiRecord | null>(null);
+  const [modalDateTimeValue, setModalDateTimeValue] = useState<string>('');
+  const [isSavingTime, setIsSavingTime] = useState<boolean>(false);
+  const [timeModalError, setTimeModalError] = useState<string | null>(null);
 
   const stats = useMemo(() => {
     const total = evaluations.length;
@@ -97,7 +108,7 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
         return false;
       }
       if (filterDate) {
-        const itemDate = item.waktuCatat.slice(0, 10);
+        const itemDate = toDateInputValue(item.waktuCatat);
         if (itemDate !== filterDate) return false;
       }
       if (!query) {
@@ -124,6 +135,44 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
   };
 
   const canModify = currentRole === 'Admin' || currentRole === 'Petugas Timbang';
+  const isAdmin = currentRole === 'Admin';
+
+  const openEditTimeModal = (record: EvaluasiRecord) => {
+    if (!isAdmin) return;
+    setTimeModalError(null);
+    setTimeModalRecord(record);
+    setModalDateTimeValue(toDateTimeLocalInputValue(record.waktuCatat));
+  };
+
+  const handleSaveTimeModal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!timeModalRecord || !isAdmin) return;
+    if (!modalDateTimeValue) {
+      setTimeModalError('Silakan pilih tanggal dan jam penimbangan terlebih dahulu.');
+      return;
+    }
+
+    const parsed = new Date(modalDateTimeValue);
+    if (Number.isNaN(parsed.getTime())) {
+      setTimeModalError('Format tanggal dan jam tidak valid.');
+      return;
+    }
+
+    setTimeModalError(null);
+    setIsSavingTime(true);
+    try {
+      await onUpdateEvaluationDateTime(timeModalRecord.id, modalDateTimeValue);
+      setTimeModalRecord(null);
+    } catch (err) {
+      setTimeModalError(
+        err instanceof Error
+          ? err.message
+          : 'Gagal memperbarui tanggal dan jam penimbangan.'
+      );
+    } finally {
+      setIsSavingTime(false);
+    }
+  };
 
   const startEdit = (record: EvaluasiRecord) => {
     setBoardError(null);
@@ -499,7 +548,7 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
                       <button
                         type="button"
                         onClick={() => handleCopy(record)}
@@ -517,6 +566,18 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
                           </>
                         )}
                       </button>
+
+                      {isAdmin && editingId !== record.id && (
+                        <button
+                          type="button"
+                          onClick={() => openEditTimeModal(record)}
+                          className="inline-flex items-center gap-1.5 text-xs font-medium text-[#059669] hover:text-emerald-800 py-1 px-2 rounded-md hover:bg-emerald-50 transition-colors"
+                          aria-label={`Edit waktu penimbangan kelas ${record.kelas}`}
+                        >
+                          <CalendarClock className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Edit Waktu</span>
+                        </button>
+                      )}
 
                       {canModify && editingId !== record.id && (
                         <button
@@ -575,6 +636,101 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
                 </div>
               </article>
           ))}
+        </div>
+      )}
+
+      {/* Modal Edit Tanggal & Jam Khusus Admin */}
+      {isAdmin && timeModalRecord && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-time-modal-title"
+        >
+          <form
+            onSubmit={handleSaveTimeModal}
+            className="bg-white border border-slate-200 rounded-xl shadow-xl w-full max-w-md p-5 sm:p-6 space-y-4"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-emerald-50 text-[#059669]">
+                  <CalendarClock className="w-5 h-5" aria-hidden="true" />
+                </div>
+                <div>
+                  <h3
+                    id="edit-time-modal-title"
+                    className="font-display text-base font-bold text-slate-900"
+                  >
+                    Edit Tanggal &amp; Jam Penimbangan
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Kelas {timeModalRecord.kelas} · {timeModalRecord.kategoriTong} ·{' '}
+                    {Number(timeModalRecord.beratKg).toFixed(1)} kg
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => !isSavingTime && setTimeModalRecord(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100"
+                aria-label="Tutup dialog edit waktu"
+              >
+                <X className="w-4 h-4" aria-hidden="true" />
+              </button>
+            </div>
+
+            {timeModalError && (
+              <div
+                role="alert"
+                className="px-3 py-2.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs"
+              >
+                {timeModalError}
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <label
+                htmlFor="modal-edit-datetime"
+                className="block text-xs font-semibold text-slate-800"
+              >
+                Tanggal &amp; Jam Penimbangan Baru
+              </label>
+              <input
+                id="modal-edit-datetime"
+                type="datetime-local"
+                required
+                value={modalDateTimeValue}
+                onChange={(e) => setModalDateTimeValue(e.target.value)}
+                className="w-full px-3 py-2.5 min-h-[42px] text-sm font-mono bg-slate-50 border border-slate-200 rounded-lg text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#059669]"
+              />
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                Waktu saat ini:{' '}
+                <span className="font-medium text-slate-700">
+                  {formatWaktu(timeModalRecord.waktuCatat)}
+                </span>
+                . Perubahan tanggal dan jam langsung memperbarui riwayat, grafik dashboard, klasemen, dan ekspor laporan.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                disabled={isSavingTime}
+                onClick={() => setTimeModalRecord(null)}
+                className="px-4 py-2 min-h-[40px] text-xs sm:text-sm font-medium bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-lg"
+              >
+                Batal
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingTime}
+                className="px-4 py-2 min-h-[40px] text-xs sm:text-sm font-semibold bg-[#059669] hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg inline-flex items-center gap-1.5"
+              >
+                <Check className="w-4 h-4" aria-hidden="true" />
+                <span>{isSavingTime ? 'Menyimpan...' : 'Simpan Waktu'}</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </section>

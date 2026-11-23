@@ -10,6 +10,12 @@ import type {
   StatusPilah,
   VerifikasiHasil,
 } from '../types';
+import {
+  formatLocalHhMm,
+  formatLocalYyyyMmDd,
+  parseDateTimeLocalToParts,
+  toDateInputValue,
+} from './dateUtils';
 
 const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim() || '';
 const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim() || '';
@@ -345,7 +351,14 @@ function mapWeighingLogRow(row: Record<string, unknown>): EvaluasiRecord {
     quickTags,
     imageUrl: rawImage ? String(rawImage) : null,
     petugasNama: String(row.petugas_nama ?? row.petugasNama ?? 'Petugas Caraka'),
-    waktuCatat: String(row.waktu_catat ?? row.waktuCatat ?? new Date().toISOString()),
+    waktuCatat: String(
+      row.waktu_catat ??
+        row.waktuCatat ??
+        row.created_at ??
+        row.tanggal_catat ??
+        row.tanggal ??
+        new Date().toISOString()
+    ),
     hasil: {
       kesesuaian_visual: Boolean(rawHasil.kesesuaian_visual ?? saranStatus === 'Terpilah Sempurna'),
       benda_salah_tempat: Array.isArray(rawHasil.benda_salah_tempat)
@@ -355,6 +368,27 @@ function mapWeighingLogRow(row: Record<string, unknown>): EvaluasiRecord {
       saran_status_pilah: saranStatus,
     },
   };
+}
+
+function findMissingOptionalColumn(
+  errorMessage: string | undefined,
+  candidateColumns: string[]
+): string | null {
+  if (!errorMessage) return null;
+  const lower = errorMessage.toLowerCase();
+  if (
+    !lower.includes('column') &&
+    !lower.includes('schema cache') &&
+    !lower.includes('does not exist')
+  ) {
+    return null;
+  }
+  for (const col of candidateColumns) {
+    if (lower.includes(col.toLowerCase())) {
+      return col;
+    }
+  }
+  return null;
 }
 
 export async function fetchWeighingLogs(): Promise<EvaluasiRecord[]> {
@@ -372,10 +406,23 @@ export async function fetchWeighingLogs(): Promise<EvaluasiRecord[]> {
 }
 
 export async function createWeighingLog(
-  record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'> & { classId?: string | null }
+  record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'> & {
+    classId?: string | null;
+    waktuCatat?: string;
+    tanggal?: string;
+    jamCatat?: string;
+  }
 ): Promise<EvaluasiRecord> {
   const client = assertSupabase();
-  const basePayload = {
+  const parsedDate = record.waktuCatat ? new Date(record.waktuCatat) : new Date();
+  const safeDate = Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  const isoTimestamp = safeDate.toISOString();
+  const dateYyyyMmDd = record.tanggal
+    ? toDateInputValue(record.tanggal)
+    : formatLocalYyyyMmDd(safeDate);
+  const jamCatat = record.jamCatat?.trim() || formatLocalHhMm(safeDate);
+
+  const payload: Record<string, unknown> = {
     class_id: record.classId ?? null,
     kelas: record.kelas,
     kategori_tong: record.kategoriTong,
@@ -386,31 +433,50 @@ export async function createWeighingLog(
     status_petugas: record.statusPetugas,
     quick_tags: Array.isArray(record.quickTags) ? record.quickTags : [],
     petugas_nama: record.petugasNama?.trim() || 'Petugas Caraka',
-    waktu_catat: new Date().toISOString(),
+    waktu_catat: isoTimestamp,
+    tanggal: dateYyyyMmDd,
+    tanggal_catat: dateYyyyMmDd,
+    jam_catat: jamCatat,
+    created_at: isoTimestamp,
+    image_url: null,
     hasil: record.hasil,
   };
 
-  let { data, error } = await client
-    .from('weighing_logs')
-    .insert({ ...basePayload, image_url: null })
-    .select()
-    .single();
+  const optionalCols = [
+    'image_url',
+    'jam_catat',
+    'tanggal',
+    'tanggal_catat',
+    'created_at',
+  ];
+  let attempt = 0;
 
-  if (error && error.message?.toLowerCase().includes('image_url')) {
-    const retry = await client
+  while (attempt <= optionalCols.length) {
+    const { data, error } = await client
       .from('weighing_logs')
-      .insert(basePayload)
+      .insert(payload)
       .select()
       .single();
-    data = retry.data;
-    error = retry.error;
-  }
 
-  if (error) {
+    if (!error) {
+      return mapWeighingLogRow(data as Record<string, unknown>);
+    }
+
+    const missingCol = findMissingOptionalColumn(
+      error.message,
+      optionalCols.filter((col) => col in payload)
+    );
+
+    if (missingCol) {
+      delete payload[missingCol];
+      attempt += 1;
+      continue;
+    }
+
     throw new Error(error.message || 'Gagal menyimpan catatan penimbangan ke Supabase.');
   }
 
-  return mapWeighingLogRow(data as Record<string, unknown>);
+  throw new Error('Gagal menyimpan catatan penimbangan ke Supabase.');
 }
 
 export async function updateWeighingLog(
@@ -454,6 +520,54 @@ export async function updateWeighingLog(
   }
 
   return mapWeighingLogRow(data as Record<string, unknown>);
+}
+
+export async function updateWeighingLogDateTime(
+  id: string,
+  dateTimeLocalInput: string
+): Promise<EvaluasiRecord> {
+  const client = assertSupabase();
+  const { isoTimestamp, tanggal, jamCatat } =
+    parseDateTimeLocalToParts(dateTimeLocalInput);
+
+  const payload: Record<string, unknown> = {
+    waktu_catat: isoTimestamp,
+    created_at: isoTimestamp,
+    tanggal,
+    tanggal_catat: tanggal,
+    jam_catat: jamCatat,
+  };
+
+  const optionalCols = ['jam_catat', 'tanggal_catat', 'tanggal', 'created_at'];
+  let attempt = 0;
+
+  while (attempt <= optionalCols.length) {
+    const { data, error } = await client
+      .from('weighing_logs')
+      .update(payload)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (!error) {
+      return mapWeighingLogRow(data as Record<string, unknown>);
+    }
+
+    const missingCol = findMissingOptionalColumn(
+      error.message,
+      optionalCols.filter((col) => col in payload)
+    );
+
+    if (missingCol) {
+      delete payload[missingCol];
+      attempt += 1;
+      continue;
+    }
+
+    throw new Error(error.message || 'Gagal memperbarui waktu penimbangan di Supabase.');
+  }
+
+  throw new Error('Gagal memperbarui waktu penimbangan di Supabase.');
 }
 
 export async function deleteWeighingLog(id: string): Promise<void> {

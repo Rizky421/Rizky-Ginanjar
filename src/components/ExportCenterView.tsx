@@ -1,6 +1,12 @@
 import React, { useMemo, useState } from 'react';
 import { FileSpreadsheet, Printer, Search } from 'lucide-react';
 import type { EvaluasiRecord, KategoriTong } from '../types';
+import {
+  formatTanggalJamSingkat,
+  getTodayDateInputValue,
+  toDateInputValue,
+  toDateTimeLocalInputValue,
+} from '../lib/dateUtils';
 import { StatusLabel } from './StatusLabel';
 import { SesiBadge } from './SesiBadge';
 
@@ -44,6 +50,8 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({
   const handleDownloadCsv = () => {
     const headers = [
       'ID',
+      'Tanggal',
+      'Jam',
       'Waktu Catat',
       'Sesi Penimbangan',
       'Keterangan Insidental',
@@ -61,6 +69,8 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({
 
     const rows = filtered.map((ev) => [
       ev.id,
+      toDateInputValue(ev.waktuCatat),
+      toDateTimeLocalInputValue(ev.waktuCatat).slice(11, 16),
       ev.waktuCatat,
       ev.sesiPenimbangan,
       ev.keteranganInsidental || '',
@@ -86,7 +96,7 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `rekap-kaizen-o-sman1-karang-bahagia-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `rekap-kaizen-o-sman1-karang-bahagia-${getTodayDateInputValue()}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -193,6 +203,9 @@ export const ExportCenterView: React.FC<ExportCenterViewProps> = ({
                   <tr key={ev.id} className="align-top">
                     <td className="py-3 pr-3 font-semibold text-slate-900 whitespace-nowrap">
                       {ev.kelas}
+                      <span className="block font-mono text-[11px] font-normal text-slate-500 mt-0.5">
+                        {formatTanggalJamSingkat(ev.waktuCatat)}
+                      </span>
                     </td>
                     <td className="py-3 px-3 whitespace-nowrap">
                       <SesiBadge

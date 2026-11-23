@@ -40,6 +40,7 @@ import {
   updateBin,
   updateClass,
   updateWeighingLog,
+  updateWeighingLogDateTime,
 } from './lib/supabase';
 import { LoginView } from './components/LoginView';
 import { AccountSettingsView } from './components/AccountSettingsView';
@@ -305,14 +306,22 @@ export default function App() {
 
   // CRUD Weighing Logs (Supabase: weighing_logs)
   const handleSaveEvaluation = async (
-    record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'>
+    record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'> & {
+      waktuCatat?: string;
+      tanggal?: string;
+      jamCatat?: string;
+    }
   ) => {
     const matchedClass = classes.find((c) => c.name === record.kelas);
     const created = await createWeighingLog({
       ...record,
       classId: matchedClass?.id ?? null,
     });
-    setEvaluations((prev) => [created, ...prev]);
+    setEvaluations((prev) =>
+      [created, ...prev].sort(
+        (a, b) => new Date(b.waktuCatat).getTime() - new Date(a.waktuCatat).getTime()
+      )
+    );
   };
 
   const handleUpdateEvaluation = async (
@@ -327,6 +336,20 @@ export default function App() {
   ) => {
     const updated = await updateWeighingLog(id, updates);
     setEvaluations((prev) => prev.map((item) => (item.id === id ? updated : item)));
+  };
+
+  const handleUpdateEvaluationDateTime = async (
+    id: string,
+    dateTimeLocalInput: string
+  ) => {
+    const updated = await updateWeighingLogDateTime(id, dateTimeLocalInput);
+    setEvaluations((prev) =>
+      prev
+        .map((item) => (item.id === id ? updated : item))
+        .sort(
+          (a, b) => new Date(b.waktuCatat).getTime() - new Date(a.waktuCatat).getTime()
+        )
+    );
   };
 
   const handleDeleteEvaluation = async (id: string) => {
@@ -567,6 +590,7 @@ export default function App() {
 
           {currentMenuObj?.id === 'scanner' && (
             <VerificationWorkbench
+              currentRole={currentRole}
               daftarKelas={classNames}
               quickTagsOrganik={masterData.quickTagsOrganik}
               quickTagsNonOrganik={masterData.quickTagsNonOrganik}
@@ -582,6 +606,7 @@ export default function App() {
               isLoading={isLoadingBoard}
               currentRole={currentRole}
               onUpdateEvaluation={handleUpdateEvaluation}
+              onUpdateEvaluationDateTime={handleUpdateEvaluationDateTime}
               onDeleteEvaluation={handleDeleteEvaluation}
               onGoToVerify={handleQuickGoScanner}
             />
