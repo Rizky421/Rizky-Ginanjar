@@ -1,0 +1,8 @@
+{
+  "name": "Rizky Adiwiyata SMAN 1 Karang Bahagia",
+  "description": "Asisten Digital Program Adiwiyata SMAN 1 Karang Bahagia untuk verifikasi visual foto sampah tong kelas dan papan evaluasi pemilahan Organik vs Non-Organik.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

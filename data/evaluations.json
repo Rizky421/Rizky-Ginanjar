@@ -1,0 +1,95 @@
+[
+  {
+    "id": "eval-seed-1",
+    "kelas": "X-2",
+    "kategoriTong": "ORGANIK",
+    "qrCodeId": "QR-X2-ORG",
+    "beratKg": 2.8,
+    "sesiPenimbangan": "Sesi Pagi (10.30-11.00)",
+    "statusPetugas": "Terpilah Sempurna",
+    "quickTags": [
+      "Organik bersih sesuai aturan"
+    ],
+    "imageUrl": "/src/assets/images/sample_organik_bersih_1795446550268.jpg",
+    "petugasNama": "Tim Pokja Adiwiyata",
+    "waktuCatat": "2026-11-23T03:45:00.000Z",
+    "hasil": {
+      "kesesuaian_visual": true,
+      "benda_salah_tempat": [],
+      "catatan_evaluasi_kelas": "Apresiasi untuk kelas X-2 pada Sesi Pagi! Seluruh isi tong organik sudah terisi daun kering, kulit buah, dan ampas teh tanpa campuran plastik sehingga siap langsung diolah menjadi kompos sekolah.",
+      "saran_status_pilah": "Terpilah Sempurna"
+    }
+  },
+  {
+    "id": "eval-seed-2",
+    "kelas": "XII-1",
+    "kategoriTong": "NON-ORGANIK",
+    "qrCodeId": "QR-XII1-NON",
+    "beratKg": 1.9,
+    "sesiPenimbangan": "Sesi Siang (12.30-13.00)",
+    "statusPetugas": "Terpilah Sempurna",
+    "quickTags": [
+      "Non-organik kering dan bersih"
+    ],
+    "imageUrl": "/src/assets/images/sample_nonorganik_bersih_1795446550814.jpg",
+    "petugasNama": "Tim Pokja Adiwiyata",
+    "waktuCatat": "2026-11-23T05:40:00.000Z",
+    "hasil": {
+      "kesesuaian_visual": true,
+      "benda_salah_tempat": [],
+      "catatan_evaluasi_kelas": "Kerja bagus, kelas XII-1! Pada penimbangan Sesi Siang, botol plastik kosong, kaleng, kertas, dan kardus sudah terpilah rapi dalam kondisi kering dan siap disetorkan ke Bank Sampah sekolah.",
+      "saran_status_pilah": "Terpilah Sempurna"
+    }
+  },
+  {
+    "id": "eval-seed-3",
+    "kelas": "XI-5",
+    "kategoriTong": "NON-ORGANIK",
+    "qrCodeId": "QR-XI5-NON",
+    "beratKg": 3.2,
+    "sesiPenimbangan": "Sesi Siang (12.30-13.00)",
+    "statusPetugas": "Tidak Dipilah",
+    "quickTags": [
+      "Sisa makanan di tong non-organik",
+      "Kulit buah basah tercampur"
+    ],
+    "imageUrl": "/src/assets/images/sample_nonorganik_tercampur_1795446550485.jpg",
+    "petugasNama": "Tim Pokja Adiwiyata",
+    "waktuCatat": "2026-11-23T05:50:00.000Z",
+    "hasil": {
+      "kesesuaian_visual": false,
+      "benda_salah_tempat": [
+        "Sisa roti dan makanan",
+        "Kulit pisang dan kulit jeruk",
+        "Bungkus makanan basah"
+      ],
+      "catatan_evaluasi_kelas": "Terima kasih atas partisipasi kelas XI-5 pada penimbangan Sesi Siang. Terlihat sisa roti, kulit buah, dan tisu basah masih masuk ke tong non-organik; mari kita pisahkan sisa makanan makan siang ke tong hijau terlebih dahulu agar plastik di tong kuning tetap bersih untuk didaur ulang.",
+      "saran_status_pilah": "Tidak Dipilah"
+    }
+  },
+  {
+    "id": "eval-seed-4",
+    "kelas": "XI-1",
+    "kategoriTong": "ORGANIK",
+    "qrCodeId": "QR-XI1-ORG",
+    "beratKg": 4.5,
+    "sesiPenimbangan": "Insidental",
+    "keteranganInsidental": "Jumat Bersih",
+    "statusPetugas": "Tercampur Ringan",
+    "quickTags": [
+      "Plastik di tong organik"
+    ],
+    "imageUrl": "/src/assets/images/sample_organik_tercampur_1795446549597.jpg",
+    "petugasNama": "Tim Pokja Adiwiyata",
+    "waktuCatat": "2026-11-20T01:30:00.000Z",
+    "hasil": {
+      "kesesuaian_visual": false,
+      "benda_salah_tempat": [
+        "Gelas plastik dengan sedotan",
+        "Kemasan makanan ringan"
+      ],
+      "catatan_evaluasi_kelas": "Terima kasih kelas XI-1 sudah aktif dalam kegiatan Jumat Bersih. Sebagian besar daun kering sudah masuk tong organik, namun masih terlihat satu gelas plastik dan bungkus snack di dalamnya; yuk pindahkan ke tong kuning agar kompos tetap bersih.",
+      "saran_status_pilah": "Tercampur Ringan"
+    }
+  }
+]

@@ -1,0 +1,67 @@
+{
+  "daftarKelas": [
+    "X-1",
+    "X-2",
+    "X-3",
+    "X-4",
+    "X-5",
+    "X-6",
+    "XI-1",
+    "XI-2",
+    "XI-3",
+    "XI-4",
+    "XI-5",
+    "XI-6",
+    "XII-1",
+    "XII-2",
+    "XII-3",
+    "XII-4",
+    "XII-5",
+    "XII-6"
+  ],
+  "quickTagsOrganik": [
+    "Plastik di tong organik",
+    "Kemasan makanan ringan tercampur",
+    "Kertas/tisu berlebihan",
+    "Kaleng/botol di tong organik",
+    "Organik bersih sesuai aturan"
+  ],
+  "quickTagsNonOrganik": [
+    "Sisa makanan di tong non-organik",
+    "Kulit buah basah tercampur",
+    "Kemasan masih berisi cairan",
+    "Kardus belum dilipat rapi",
+    "Non-organik kering dan bersih"
+  ],
+  "users": [
+    {
+      "id": "usr-1",
+      "nama": "Rizky Pratama, S.Pd.",
+      "email": "rizky421@guru.sma.belajar.id",
+      "peran": "Admin",
+      "aktif": true
+    },
+    {
+      "id": "usr-2",
+      "nama": "Pokja Kebersihan Adiwiyata",
+      "email": "pokja.adiwiyata@sman1kb.sch.id",
+      "peran": "Petugas Timbang",
+      "aktif": true
+    },
+    {
+      "id": "usr-3",
+      "nama": "Siti Aminah, M.Pd.",
+      "email": "siti.aminah@guru.sma.belajar.id",
+      "peran": "Wali Kelas",
+      "kelasBinaan": "XI-3",
+      "aktif": true
+    },
+    {
+      "id": "usr-4",
+      "nama": "Drs. H. Ahmad Fauzi, M.M.",
+      "email": "kepsek@sman1kb.sch.id",
+      "peran": "Kepala Sekolah",
+      "aktif": true
+    }
+  ]
+}
