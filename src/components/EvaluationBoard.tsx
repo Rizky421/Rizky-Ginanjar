@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { Copy, Check, Search, Trash2, ImageOff } from 'lucide-react';
-import { SESI_PENIMBANGAN_OPTIONS } from '../constants';
+import { Copy, Check, Search, Trash2, ImageOff, Pencil, X } from 'lucide-react';
+import { SESI_PENIMBANGAN_OPTIONS, STATUS_PILAH_OPTIONS } from '../constants';
 import type {
   EvaluasiRecord,
   KategoriTong,
@@ -15,6 +15,16 @@ interface EvaluationBoardProps {
   evaluations: EvaluasiRecord[];
   isLoading: boolean;
   currentRole: Role;
+  onUpdateEvaluation: (
+    id: string,
+    updates: {
+      beratKg: number;
+      sesiPenimbangan: SesiPenimbangan;
+      keteranganInsidental?: string;
+      statusPetugas: StatusPilah;
+      hasil: EvaluasiRecord['hasil'];
+    }
+  ) => Promise<void>;
   onDeleteEvaluation: (id: string) => Promise<void>;
   onGoToVerify: () => void;
 }
@@ -38,6 +48,7 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
   evaluations,
   isLoading,
   currentRole,
+  onUpdateEvaluation,
   onDeleteEvaluation,
   onGoToVerify,
 }) => {
@@ -48,6 +59,14 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
   const [filterStatus, setFilterStatus] = useState<'SEMUA' | StatusPilah>('SEMUA');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBeratKg, setEditBeratKg] = useState<string>('0');
+  const [editSesi, setEditSesi] = useState<SesiPenimbangan>('Sesi Pagi (10.30-11.00)');
+  const [editInsidental, setEditInsidental] = useState<string>('');
+  const [editStatus, setEditStatus] = useState<StatusPilah>('Terpilah Sempurna');
+  const [editCatatan, setEditCatatan] = useState<string>('');
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
+  const [boardError, setBoardError] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
 
   const stats = useMemo(() => {
@@ -107,8 +126,55 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
 
   const canModify = currentRole === 'Admin' || currentRole === 'Petugas Timbang';
 
+  const startEdit = (record: EvaluasiRecord) => {
+    setBoardError(null);
+    setConfirmDeleteId(null);
+    setEditingId(record.id);
+    setEditBeratKg(String(record.beratKg));
+    setEditSesi(record.sesiPenimbangan);
+    setEditInsidental(record.keteranganInsidental || '');
+    setEditStatus(record.hasil.saran_status_pilah);
+    setEditCatatan(record.hasil.catatan_evaluasi_kelas);
+  };
+
+  const handleSaveEdit = async (record: EvaluasiRecord) => {
+    setBoardError(null);
+    setIsUpdating(true);
+    try {
+      await onUpdateEvaluation(record.id, {
+        beratKg: parseFloat(editBeratKg) || 0,
+        sesiPenimbangan: editSesi,
+        keteranganInsidental:
+          editSesi === 'Insidental' ? editInsidental.trim() || undefined : undefined,
+        statusPetugas: editStatus,
+        hasil: {
+          ...record.hasil,
+          kesesuaian_visual: editStatus === 'Terpilah Sempurna',
+          saran_status_pilah: editStatus,
+          catatan_evaluasi_kelas:
+            editCatatan.trim() || record.hasil.catatan_evaluasi_kelas,
+        },
+      });
+      setEditingId(null);
+    } catch (err) {
+      setBoardError(
+        err instanceof Error ? err.message : 'Gagal memperbarui catatan evaluasi.'
+      );
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   return (
     <section className="space-y-6">
+      {boardError && (
+        <div
+          role="alert"
+          className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium"
+        >
+          {boardError}
+        </div>
+      )}
       {/* 4-column metric strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 bg-white border border-slate-200 rounded-xl divide-y lg:divide-y-0 lg:divide-x divide-slate-200">
         <div className="p-4 sm:p-5 space-y-1">
@@ -340,17 +406,112 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-sm sm:text-[15px] text-slate-800 leading-relaxed">
-                      {record.hasil.catatan_evaluasi_kelas}
-                    </p>
+                    {editingId === record.id ? (
+                      <div className="space-y-3 bg-slate-50 border border-slate-200 rounded-lg p-3.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-semibold text-slate-700">
+                              Berat (kg)
+                            </label>
+                            <input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              value={editBeratKg}
+                              onChange={(e) => setEditBeratKg(e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-xs font-mono bg-white border border-slate-200 rounded-md"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-semibold text-slate-700">
+                              Sesi Penimbangan
+                            </label>
+                            <select
+                              value={editSesi}
+                              onChange={(e) =>
+                                setEditSesi(e.target.value as SesiPenimbangan)
+                              }
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
+                            >
+                              {SESI_PENIMBANGAN_OPTIONS.map((sesi) => (
+                                <option key={sesi} value={sesi}>
+                                  {sesi}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="block text-[11px] font-semibold text-slate-700">
+                              Status Pemilahan
+                            </label>
+                            <select
+                              value={editStatus}
+                              onChange={(e) =>
+                                setEditStatus(e.target.value as StatusPilah)
+                              }
+                              className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
+                            >
+                              {STATUS_PILAH_OPTIONS.map((st) => (
+                                <option key={st} value={st}>
+                                  {st}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
 
-                    {record.hasil.benda_salah_tempat.length > 0 && (
-                      <p className="text-xs text-slate-600">
-                        <span className="font-semibold text-[#D97706]">
-                          Benda salah tempat:
-                        </span>{' '}
-                        {record.hasil.benda_salah_tempat.join(', ')}
-                      </p>
+                        {editSesi === 'Insidental' && (
+                          <input
+                            type="text"
+                            value={editInsidental}
+                            onChange={(e) => setEditInsidental(e.target.value)}
+                            placeholder="Keterangan kegiatan insidental..."
+                            className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md"
+                          />
+                        )}
+
+                        <textarea
+                          rows={2}
+                          value={editCatatan}
+                          onChange={(e) => setEditCatatan(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-md leading-relaxed"
+                        />
+
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium bg-white border border-slate-200 text-slate-700 rounded-md"
+                          >
+                            <X className="w-3.5 h-3.5" aria-hidden="true" />
+                            <span>Batal</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isUpdating}
+                            onClick={() => handleSaveEdit(record)}
+                            className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold bg-[#059669] hover:bg-emerald-700 disabled:opacity-60 text-white rounded-md"
+                          >
+                            <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                            <span>{isUpdating ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm sm:text-[15px] text-slate-800 leading-relaxed">
+                          {record.hasil.catatan_evaluasi_kelas}
+                        </p>
+
+                        {record.hasil.benda_salah_tempat.length > 0 && (
+                          <p className="text-xs text-slate-600">
+                            <span className="font-semibold text-[#D97706]">
+                              Benda salah tempat:
+                            </span>{' '}
+                            {record.hasil.benda_salah_tempat.join(', ')}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -384,14 +545,34 @@ export const EvaluationBoard: React.FC<EvaluationBoardProps> = ({
                         )}
                       </button>
 
+                      {canModify && editingId !== record.id && (
+                        <button
+                          type="button"
+                          onClick={() => startEdit(record)}
+                          className="inline-flex items-center gap-1 text-xs font-medium text-slate-500 hover:text-slate-900 py-1 px-2 rounded-md hover:bg-slate-50 transition-colors"
+                          aria-label={`Ubah evaluasi kelas ${record.kelas}`}
+                        >
+                          <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                          <span>Ubah</span>
+                        </button>
+                      )}
+
                       {canModify &&
                         (confirmDeleteId === record.id ? (
                           <div className="inline-flex items-center gap-2">
                             <button
                               type="button"
                               onClick={async () => {
-                                await onDeleteEvaluation(record.id);
-                                setConfirmDeleteId(null);
+                                try {
+                                  await onDeleteEvaluation(record.id);
+                                  setConfirmDeleteId(null);
+                                } catch (err) {
+                                  setBoardError(
+                                    err instanceof Error
+                                      ? err.message
+                                      : 'Gagal menghapus catatan evaluasi.'
+                                  );
+                                }
                               }}
                               className="text-xs font-semibold text-red-600 hover:underline"
                             >

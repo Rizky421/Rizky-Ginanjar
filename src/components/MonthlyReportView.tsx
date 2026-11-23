@@ -15,6 +15,7 @@ import type {
   MonthlyRecapInput,
   MonthlyReportOutput,
 } from '../types';
+import { generateMonthlyReportWithGemini } from '../lib/gemini';
 
 interface MonthlyReportViewProps {
   evaluations: EvaluasiRecord[];
@@ -157,19 +158,8 @@ export const MonthlyReportView: React.FC<MonthlyReportViewProps> = ({
     setIsGenerating(true);
     setError(null);
     try {
-      const response = await fetch('/api/monthly-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const payload = (await response.json()) as {
-        report?: MonthlyReportOutput;
-        error?: string;
-      };
-      if (!response.ok || !payload.report) {
-        throw new Error(payload.error || 'Gagal menyusun laporan bulanan.');
-      }
-      setReport(payload.report);
+      const generated = await generateMonthlyReportWithGemini(form);
+      setReport(generated);
     } catch (err) {
       setError(
         err instanceof Error

@@ -14,7 +14,33 @@ import {
   LogOut,
 } from 'lucide-react';
 import { INITIAL_MASTER_DATA } from './constants';
-import type { AuthUser, EvaluasiRecord, MasterData, Role } from './types';
+import type {
+  AuthUser,
+  BinItem,
+  ClassItem,
+  EvaluasiRecord,
+  KategoriTong,
+  MasterData,
+  Role,
+  SesiPenimbangan,
+  StatusPilah,
+} from './types';
+import {
+  buildStandardQrCodeId,
+  createBin,
+  createClass,
+  createDefaultBinsForClass,
+  createWeighingLog,
+  deleteBin,
+  deleteClass,
+  deleteWeighingLog,
+  fetchBins,
+  fetchClasses,
+  fetchWeighingLogs,
+  updateBin,
+  updateClass,
+  updateWeighingLog,
+} from './lib/supabase';
 import { LoginView } from './components/LoginView';
 import { AccountSettingsView } from './components/AccountSettingsView';
 import { DashboardLeaderboardView } from './components/DashboardLeaderboardView';
@@ -24,6 +50,28 @@ import { QrManagementView } from './components/QrManagementView';
 import { MonthlyReportView } from './components/MonthlyReportView';
 import { ExportCenterView } from './components/ExportCenterView';
 import { MasterDataView } from './components/MasterDataView';
+
+const MASTER_PREFS_STORAGE_KEY = 'kaizeno_master_prefs_v1';
+
+function loadLocalMasterPrefs(): MasterData {
+  try {
+    const raw = localStorage.getItem(MASTER_PREFS_STORAGE_KEY);
+    if (!raw) return INITIAL_MASTER_DATA;
+    const parsed = JSON.parse(raw) as Partial<MasterData>;
+    return {
+      daftarKelas: INITIAL_MASTER_DATA.daftarKelas,
+      quickTagsOrganik: Array.isArray(parsed.quickTagsOrganik)
+        ? parsed.quickTagsOrganik
+        : INITIAL_MASTER_DATA.quickTagsOrganik,
+      quickTagsNonOrganik: Array.isArray(parsed.quickTagsNonOrganik)
+        ? parsed.quickTagsNonOrganik
+        : INITIAL_MASTER_DATA.quickTagsNonOrganik,
+      users: Array.isArray(parsed.users) ? parsed.users : INITIAL_MASTER_DATA.users,
+    };
+  } catch {
+    return INITIAL_MASTER_DATA;
+  }
+}
 
 interface MenuItem {
   id: string;
@@ -97,32 +145,32 @@ export default function App() {
   const [activeMenu, setActiveMenu] = useState<string>('dashboard');
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
+  const [classes, setClasses] = useState<ClassItem[]>([]);
+  const [bins, setBins] = useState<BinItem[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluasiRecord[]>([]);
   const [isLoadingBoard, setIsLoadingBoard] = useState<boolean>(true);
-  const [masterData, setMasterData] = useState<MasterData>(INITIAL_MASTER_DATA);
+  const [dataError, setDataError] = useState<string | null>(null);
+  const [masterData, setMasterData] = useState<MasterData>(() => loadLocalMasterPrefs());
   const [resetSignal, setResetSignal] = useState<number>(0);
 
   const fetchInitialData = useCallback(async () => {
     setIsLoadingBoard(true);
+    setDataError(null);
     try {
-      const [evalRes, masterRes] = await Promise.all([
-        fetch('/api/evaluations'),
-        fetch('/api/master-data'),
+      const [classesList, binsList, logsList] = await Promise.all([
+        fetchClasses(),
+        fetchBins(),
+        fetchWeighingLogs(),
       ]);
-      if (evalRes.ok) {
-        const evalData = (await evalRes.json()) as { evaluations?: EvaluasiRecord[] };
-        if (Array.isArray(evalData.evaluations)) {
-          setEvaluations(evalData.evaluations);
-        }
-      }
-      if (masterRes.ok) {
-        const mData = (await masterRes.json()) as { masterData?: MasterData };
-        if (mData.masterData) {
-          setMasterData(mData.masterData);
-        }
-      }
-    } catch {
-      // Keep defaults on transient error
+      setClasses(classesList);
+      setBins(binsList);
+      setEvaluations(logsList);
+    } catch (err) {
+      setDataError(
+        err instanceof Error
+          ? err.message
+          : 'Gagal memuat data dari Supabase. Pastikan skema tabel sudah dijalankan.'
+      );
     } finally {
       setIsLoadingBoard(false);
     }
@@ -161,44 +209,142 @@ export default function App() {
   const currentMenuObj =
     visibleMenus.find((m) => m.id === activeMenu) || visibleMenus[0];
 
+  const classNames = classes.map((c) => c.name);
+
+  // CRUD Classes (Supabase: classes + default bins)
+  const handleAddClass = async (name: string) => {
+    const created = await createClass(name);
+    setClasses((prev) =>
+      [...prev, created].sort((a, b) => a.name.localeCompare(b.name))
+    );
+    try {
+      const createdBins = await createDefaultBinsForClass(created);
+      setBins((prev) => {
+        const existingIds = new Set(prev.map((b) => b.id));
+        const fresh = createdBins.filter((b) => !existingIds.has(b.id));
+        return [...prev, ...fresh];
+      });
+    } catch {
+      // Class creation succeeded; bin sync can be retried from QrManagementView
+    }
+  };
+
+  const handleUpdateClass = async (classId: string, newName: string) => {
+    const prevClass = classes.find((c) => c.id === classId);
+    const updated = await updateClass(classId, newName);
+    setClasses((prev) =>
+      prev
+        .map((c) => (c.id === classId ? updated : c))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    );
+
+    const relatedBins = bins.filter(
+      (b) => b.class_id === classId || (prevClass && b.kelas === prevClass.name)
+    );
+    if (relatedBins.length > 0) {
+      const updatedBins = await Promise.all(
+        relatedBins.map((b) =>
+          updateBin(b.id, {
+            kelas: updated.name,
+            qr_code_id: buildStandardQrCodeId(updated.name, b.kategori),
+          })
+        )
+      );
+      const updatedMap = new Map(updatedBins.map((b) => [b.id, b]));
+      setBins((prev) => prev.map((b) => updatedMap.get(b.id) ?? b));
+    }
+  };
+
+  const handleDeleteClass = async (classId: string, className: string) => {
+    await deleteClass(classId);
+    setClasses((prev) => prev.filter((c) => c.id !== classId));
+    setBins((prev) =>
+      prev.filter((b) => b.class_id !== classId && b.kelas !== className)
+    );
+  };
+
+  // CRUD Bins (Supabase: bins)
+  const handleCreateBin = async (input: {
+    class_id?: string | null;
+    kelas: string;
+    kategori: KategoriTong;
+    qr_code_id?: string;
+  }) => {
+    const created = await createBin(input);
+    setBins((prev) => [...prev, created]);
+  };
+
+  const handleUpdateBin = async (
+    binId: string,
+    updates: Partial<Pick<BinItem, 'kelas' | 'kategori' | 'qr_code_id' | 'class_id'>>
+  ) => {
+    const updated = await updateBin(binId, updates);
+    setBins((prev) => prev.map((b) => (b.id === binId ? updated : b)));
+  };
+
+  const handleDeleteBin = async (binId: string) => {
+    await deleteBin(binId);
+    setBins((prev) => prev.filter((b) => b.id !== binId));
+  };
+
+  const handleSyncBins = async () => {
+    for (const c of classes) {
+      const hasOrg = bins.some(
+        (b) => (b.class_id === c.id || b.kelas === c.name) && b.kategori === 'ORGANIK'
+      );
+      const hasNon = bins.some(
+        (b) => (b.class_id === c.id || b.kelas === c.name) && b.kategori === 'NON-ORGANIK'
+      );
+      if (!hasOrg || !hasNon) {
+        await createDefaultBinsForClass(c);
+      }
+    }
+    const latestBins = await fetchBins();
+    setBins(latestBins);
+  };
+
+  // CRUD Weighing Logs (Supabase: weighing_logs)
   const handleSaveEvaluation = async (
     record: Omit<EvaluasiRecord, 'id' | 'waktuCatat'>
   ) => {
-    const response = await fetch('/api/evaluations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(record),
+    const matchedClass = classes.find((c) => c.name === record.kelas);
+    const created = await createWeighingLog({
+      ...record,
+      classId: matchedClass?.id ?? null,
     });
-    const data = (await response.json()) as {
-      evaluation?: EvaluasiRecord;
-      error?: string;
-    };
-    if (!response.ok || !data.evaluation) {
-      throw new Error(data.error || 'Gagal menyimpan catatan evaluasi.');
+    setEvaluations((prev) => [created, ...prev]);
+  };
+
+  const handleUpdateEvaluation = async (
+    id: string,
+    updates: {
+      beratKg: number;
+      sesiPenimbangan: SesiPenimbangan;
+      keteranganInsidental?: string;
+      statusPetugas: StatusPilah;
+      hasil: EvaluasiRecord['hasil'];
     }
-    setEvaluations((prev) => [data.evaluation!, ...prev]);
+  ) => {
+    const updated = await updateWeighingLog(id, updates);
+    setEvaluations((prev) => prev.map((item) => (item.id === id ? updated : item)));
   };
 
   const handleDeleteEvaluation = async (id: string) => {
-    const response = await fetch(`/api/evaluations/${encodeURIComponent(id)}`, {
-      method: 'DELETE',
-    });
-    if (response.ok) {
-      setEvaluations((prev) => prev.filter((item) => item.id !== id));
-    }
+    await deleteWeighingLog(id);
+    setEvaluations((prev) => prev.filter((item) => item.id !== id));
   };
 
   const handleUpdateMasterData = async (next: MasterData) => {
-    const response = await fetch('/api/master-data', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(next),
-    });
-    const data = (await response.json()) as { masterData?: MasterData; error?: string };
-    if (!response.ok || !data.masterData) {
-      throw new Error(data.error || 'Gagal menyimpan data master.');
+    const sanitized: MasterData = {
+      ...next,
+      daftarKelas: classNames,
+    };
+    try {
+      localStorage.setItem(MASTER_PREFS_STORAGE_KEY, JSON.stringify(sanitized));
+    } catch {
+      // ignore storage quota errors
     }
-    setMasterData(data.masterData);
+    setMasterData(sanitized);
   };
 
   const handleQuickGoScanner = () => {
@@ -393,11 +539,27 @@ export default function App() {
         </header>
 
         {/* Active View Content */}
-        <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-8">
+        <main className="flex-1 p-4 sm:p-6 pb-24 md:pb-8 space-y-4">
+          {dataError && (
+            <div
+              role="alert"
+              className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-medium flex items-center justify-between gap-3"
+            >
+              <span>{dataError}</span>
+              <button
+                type="button"
+                onClick={fetchInitialData}
+                className="font-semibold underline shrink-0"
+              >
+                Muat Ulang
+              </button>
+            </div>
+          )}
+
           {currentMenuObj?.id === 'dashboard' && (
             <DashboardLeaderboardView
               evaluations={evaluations}
-              daftarKelas={masterData.daftarKelas}
+              daftarKelas={classNames}
               currentRole={currentRole}
               onNavigate={(id) => setActiveMenu(id)}
             />
@@ -405,7 +567,7 @@ export default function App() {
 
           {currentMenuObj?.id === 'scanner' && (
             <VerificationWorkbench
-              daftarKelas={masterData.daftarKelas}
+              daftarKelas={classNames}
               quickTagsOrganik={masterData.quickTagsOrganik}
               quickTagsNonOrganik={masterData.quickTagsNonOrganik}
               onSaveEvaluation={handleSaveEvaluation}
@@ -419,13 +581,21 @@ export default function App() {
               evaluations={evaluations}
               isLoading={isLoadingBoard}
               currentRole={currentRole}
+              onUpdateEvaluation={handleUpdateEvaluation}
               onDeleteEvaluation={handleDeleteEvaluation}
               onGoToVerify={handleQuickGoScanner}
             />
           )}
 
           {currentMenuObj?.id === 'cetak-qr' && (
-            <QrManagementView daftarKelas={masterData.daftarKelas} />
+            <QrManagementView
+              classes={classes}
+              bins={bins}
+              onCreateBin={handleCreateBin}
+              onUpdateBin={handleUpdateBin}
+              onDeleteBin={handleDeleteBin}
+              onSyncBins={handleSyncBins}
+            />
           )}
 
           {currentMenuObj?.id === 'asisten-ai' && (
@@ -438,7 +608,11 @@ export default function App() {
 
           {currentMenuObj?.id === 'data-master' && (
             <MasterDataView
-              masterData={masterData}
+              classes={classes}
+              onAddClass={handleAddClass}
+              onUpdateClass={handleUpdateClass}
+              onDeleteClass={handleDeleteClass}
+              masterData={{ ...masterData, daftarKelas: classNames }}
               onUpdateMasterData={handleUpdateMasterData}
             />
           )}

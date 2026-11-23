@@ -1,8 +1,12 @@
 import React, { useState } from 'react';
-import { Plus, Trash2, Check } from 'lucide-react';
-import type { MasterData, Role, UserAccount } from '../types';
+import { Plus, Trash2, Check, Pencil, X } from 'lucide-react';
+import type { ClassItem, MasterData, Role, UserAccount } from '../types';
 
 interface MasterDataViewProps {
+  classes: ClassItem[];
+  onAddClass: (name: string) => Promise<void>;
+  onUpdateClass: (classId: string, newName: string) => Promise<void>;
+  onDeleteClass: (classId: string, className: string) => Promise<void>;
   masterData: MasterData;
   onUpdateMasterData: (next: MasterData) => Promise<void>;
 }
@@ -10,10 +14,18 @@ interface MasterDataViewProps {
 const ROLES: Role[] = ['Admin', 'Petugas Timbang', 'Wali Kelas', 'Kepala Sekolah'];
 
 export const MasterDataView: React.FC<MasterDataViewProps> = ({
+  classes,
+  onAddClass,
+  onUpdateClass,
+  onDeleteClass,
   masterData,
   onUpdateMasterData,
 }) => {
   const [newKelas, setNewKelas] = useState('');
+  const [editingClassId, setEditingClassId] = useState<string | null>(null);
+  const [editingClassName, setEditingClassName] = useState('');
+  const [busyClassId, setBusyClassId] = useState<string | null>(null);
+
   const [newTagOrganik, setNewTagOrganik] = useState('');
   const [newTagNonOrganik, setNewTagNonOrganik] = useState('');
   const [newUser, setNewUser] = useState<{
@@ -30,12 +42,16 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
   const [savingMsg, setSavingMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const showSuccess = (label: string) => {
+    setSavingMsg(label);
+    setTimeout(() => setSavingMsg(null), 2200);
+  };
+
   const persist = async (next: MasterData, label: string) => {
     setErrorMsg(null);
     try {
       await onUpdateMasterData(next);
-      setSavingMsg(label);
-      setTimeout(() => setSavingMsg(null), 2000);
+      showSuccess(label);
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal menyimpan data master.');
     }
@@ -43,22 +59,65 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
 
   const handleAddKelas = async () => {
     const val = newKelas.trim().toUpperCase();
-    if (!val || masterData.daftarKelas.includes(val)) return;
-    await persist(
-      { ...masterData, daftarKelas: [...masterData.daftarKelas, val] },
-      `Kelas ${val} ditambahkan`
-    );
-    setNewKelas('');
+    if (!val) return;
+    if (classes.some((c) => c.name.toUpperCase() === val)) {
+      setErrorMsg(`Kelas ${val} sudah terdaftar.`);
+      return;
+    }
+    setErrorMsg(null);
+    setBusyClassId('adding');
+    try {
+      await onAddClass(val);
+      setNewKelas('');
+      showSuccess(`Kelas ${val} dan tong QR default ditambahkan`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : `Gagal menambahkan kelas ${val}.`);
+    } finally {
+      setBusyClassId(null);
+    }
   };
 
-  const handleRemoveKelas = async (kelas: string) => {
-    await persist(
-      {
-        ...masterData,
-        daftarKelas: masterData.daftarKelas.filter((k) => k !== kelas),
-      },
-      `Kelas ${kelas} dihapus`
-    );
+  const handleStartEditKelas = (item: ClassItem) => {
+    setEditingClassId(item.id);
+    setEditingClassName(item.name);
+    setErrorMsg(null);
+  };
+
+  const handleSaveEditKelas = async (item: ClassItem) => {
+    const val = editingClassName.trim().toUpperCase();
+    if (!val) return;
+    if (val === item.name.toUpperCase()) {
+      setEditingClassId(null);
+      return;
+    }
+    if (classes.some((c) => c.id !== item.id && c.name.toUpperCase() === val)) {
+      setErrorMsg(`Kelas ${val} sudah ada.`);
+      return;
+    }
+    setErrorMsg(null);
+    setBusyClassId(item.id);
+    try {
+      await onUpdateClass(item.id, val);
+      setEditingClassId(null);
+      showSuccess(`Kelas diperbarui menjadi ${val}`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'Gagal mengubah nama kelas.');
+    } finally {
+      setBusyClassId(null);
+    }
+  };
+
+  const handleRemoveKelas = async (item: ClassItem) => {
+    setErrorMsg(null);
+    setBusyClassId(item.id);
+    try {
+      await onDeleteClass(item.id, item.name);
+      showSuccess(`Kelas ${item.name} dihapus`);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : `Gagal menghapus kelas ${item.name}.`);
+    } finally {
+      setBusyClassId(null);
+    }
   };
 
   const handleAddTag = async (type: 'organik' | 'nonOrganik') => {
@@ -161,11 +220,11 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
             <div>
               <h3 className="text-base font-bold text-slate-900">Daftar Kelas</h3>
               <p className="text-xs text-slate-500">
-                Tersinkron ke Scanner QR & Generator Stiker
+                Tersinkron langsung ke Supabase &amp; Tong QR
               </p>
             </div>
             <span className="font-mono text-xs tabular-nums text-slate-500">
-              {masterData.daftarKelas.length} kelas
+              {classes.length} kelas
             </span>
           </div>
 
@@ -180,31 +239,84 @@ export const MasterDataView: React.FC<MasterDataViewProps> = ({
             />
             <button
               type="button"
+              disabled={busyClassId === 'adding'}
               onClick={handleAddKelas}
-              className="inline-flex items-center gap-1 px-3.5 py-2 min-h-[40px] text-xs font-semibold bg-[#059669] hover:bg-emerald-700 text-white rounded-lg shrink-0"
+              className="inline-flex items-center gap-1 px-3.5 py-2 min-h-[40px] text-xs font-semibold bg-[#059669] hover:bg-emerald-700 disabled:opacity-60 text-white rounded-lg shrink-0"
             >
               <Plus className="w-4 h-4" aria-hidden="true" />
               <span>Tambah</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-1">
-            {masterData.daftarKelas.map((kelas) => (
-              <div
-                key={kelas}
-                className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
-              >
-                <span>{kelas}</span>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveKelas(kelas)}
-                  aria-label={`Hapus kelas ${kelas}`}
-                  className="text-slate-400 hover:text-red-600 ml-1"
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+            {classes.map((item) => {
+              const isEditing = editingClassId === item.id;
+              const isBusy = busyClassId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800"
                 >
-                  ×
-                </button>
-              </div>
-            ))}
+                  {isEditing ? (
+                    <div className="flex items-center gap-1 w-full">
+                      <input
+                        type="text"
+                        value={editingClassName}
+                        onChange={(e) => setEditingClassName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleSaveEditKelas(item);
+                          if (e.key === 'Escape') setEditingClassId(null);
+                        }}
+                        aria-label={`Ubah nama kelas ${item.name}`}
+                        className="w-full min-w-0 px-1.5 py-0.5 text-xs bg-white border border-slate-300 rounded text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#059669]"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleSaveEditKelas(item)}
+                        aria-label="Simpan nama kelas"
+                        className="text-[#059669] hover:text-emerald-700 shrink-0"
+                      >
+                        <Check className="w-3.5 h-3.5" aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingClassId(null)}
+                        aria-label="Batal ubah"
+                        className="text-slate-400 hover:text-slate-700 shrink-0"
+                      >
+                        <X className="w-3.5 h-3.5" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="truncate">{item.name}</span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleStartEditKelas(item)}
+                          aria-label={`Ubah kelas ${item.name}`}
+                          className="text-slate-400 hover:text-slate-700 p-0.5"
+                        >
+                          <Pencil className="w-3 h-3" aria-hidden="true" />
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => handleRemoveKelas(item)}
+                          aria-label={`Hapus kelas ${item.name}`}
+                          className="text-slate-400 hover:text-red-600 p-0.5 disabled:opacity-40"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
 

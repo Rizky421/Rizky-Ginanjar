@@ -110,11 +110,24 @@ export interface UserAccount {
   aktif: boolean;
 }
 
+export interface ClassItem {
+  id: string;
+  name: string;
+  created_at?: string;
+}
+
+export interface BinItem {
+  id: string;
+  class_id?: string | null;
+  kelas: string;
+  kategori: KategoriTong;
+  qr_code_id: string;
+  created_at?: string;
+}
+
 export interface MasterData {
   daftarKelas: string[];
   quickTagsOrganik: string[];
   quickTagsNonOrganik: string[];
   users: UserAccount[];
 }
-
-

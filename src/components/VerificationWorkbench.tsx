@@ -27,6 +27,7 @@ import type {
 } from '../types';
 import { StatusLabel } from './StatusLabel';
 import { SesiBadge } from './SesiBadge';
+import { verifyWasteWithGemini } from '../lib/gemini';
 
 interface VerificationWorkbenchProps {
   daftarKelas?: string[];
@@ -119,6 +120,12 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
   const [showJson, setShowJson] = useState<boolean>(false);
   const [copiedNote, setCopiedNote] = useState<boolean>(false);
   const [savedBanner, setSavedBanner] = useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (daftarKelas.length > 0 && !daftarKelas.includes(kelas)) {
+      setKelas(daftarKelas[0]);
+    }
+  }, [daftarKelas, kelas]);
 
   React.useEffect(() => {
     if (resetSignal > 0) {
@@ -289,37 +296,28 @@ export const VerificationWorkbench: React.FC<VerificationWorkbenchProps> = ({
     setSavedBanner(false);
 
     try {
-      const response = await fetch('/api/verify-waste', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          kelas,
-          kategoriTong,
-          sesiPenimbangan,
-          keteranganInsidental:
-            sesiPenimbangan === 'Insidental' ? keteranganInsidental : undefined,
-          beratKg: parseFloat(beratKg) || 0,
-          statusPetugas,
-          quickTags,
-          imageBase64: uploadedDataUrl || undefined,
-          imageMimeType: uploadedDataUrl ? uploadedMimeType : undefined,
-          sampleImagePath: uploadedDataUrl ? undefined : selectedSamplePath,
-        }),
+      const result = await verifyWasteWithGemini({
+        kelas,
+        kategoriTong,
+        sesiPenimbangan,
+        keteranganInsidental:
+          sesiPenimbangan === 'Insidental' ? keteranganInsidental : undefined,
+        beratKg: parseFloat(beratKg) || 0,
+        statusPetugas,
+        quickTags,
+        imageBase64: uploadedDataUrl || undefined,
+        imageMimeType: uploadedDataUrl ? uploadedMimeType : undefined,
+        sampleImagePath: uploadedDataUrl ? undefined : selectedSamplePath,
       });
 
-      const payload = (await response.json()) as { result?: VerifikasiHasil; error?: string };
-      if (!response.ok || !payload.result) {
-        throw new Error(payload.error || 'Gagal memverifikasi foto tong sampah.');
-      }
-
-      setHasil(payload.result);
-      setEditableCatatan(payload.result.catatan_evaluasi_kelas);
-      setSelectedFinalStatus(payload.result.saran_status_pilah);
+      setHasil(result);
+      setEditableCatatan(result.catatan_evaluasi_kelas);
+      setSelectedFinalStatus(result.saran_status_pilah);
     } catch (err) {
       setVerifyError(
         err instanceof Error
           ? err.message
-          : 'Terjadi kesalahan jaringan saat menghubungi layanan verifikasi.'
+          : 'Terjadi kesalahan saat menghubungi layanan verifikasi AI.'
       );
     } finally {
       setIsVerifying(false);
